@@ -220,7 +220,7 @@ def predict_video(model_dir, video_path, im_shape=(1920, 1080), use_camera=False
         #print(frame[1,1,:])
         #frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         #print(frame[1,1,:])
-        cv2.imwrite("crowd.jpg" frame)
+        cv2.imwrite("crowd.jpg", frame)
         
         break
         faces = []
