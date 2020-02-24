@@ -38,7 +38,6 @@ def VisualizeResult(im, faces):
     LABELS = ['NO_MASK', 'MASK']
     COLORS = [(0, 0, 255), (0, 255, 0)]
     for face in faces:
-        
         label = LABELS[face.class_id]
         color = COLORS[face.class_id]
         left, right, top, bottom = [int(item) for item in face.rect_info]
@@ -152,13 +151,7 @@ class FaceDetector:
         output_data = output_data.as_ndarray()
         return self.Postprocess(output_data, ori_im, shrink)
 
-if __name__ == "__main__":
-    models_dir = '/root/projects/PaddleMask/models/'
-    image_paths = [
-        './mask_input.png',
-        './test_mask_detection.jpg'
-    ]
-
+def predict_images(model_dir, image_paths):
     detector = FaceDetector(
         model_dir = models_dir + '/pyramidbox_lite/',
         mean = [104.0, 177.0, 123.0],
@@ -182,3 +175,89 @@ if __name__ == "__main__":
         classifier.Predict(det_out)
         img = VisualizeResult(im, det_out)
         cv2.imwrite("result_%d.jpg" % idx, img)
+
+
+def predict_video(model_dir, video_path, img_shape=(1920, 1080), use_camera=False):
+    if use_camera:
+        capture = cv2.VideoCapture(0)
+    capture = cv2.VideoCapture(video_path)
+
+    detector = FaceDetector(
+        model_dir = models_dir + '/pyramidbox_lite/',
+        mean = [104.0, 177.0, 123.0],
+        scale = [0.007843, 0.007843, 0.007843],
+        use_gpu = False,
+        threshold = 0.7
+    )
+
+    classifier = MaskClassifier(
+        model_dir = models_dir + '/mask_detector/',
+        mean = [0.5, 0.5, 0.5],
+        scale = [1.0, 1.0, 1.0],
+        use_gpu = False
+    )
+    data = []
+    index = 0
+    while (1):
+        frameData = {}
+        ret, frame = capture.read()
+        if ret == False:
+            break
+        frame_copy = frame.copy()
+        det_out = detector.Predict(frame, faces, shrink = 0.7)
+        classifier.Predict(det_out)
+        img = VisualizeResult(im, det_out)
+        cv2.imwrite("result_%d.jpg" % idx, img)
+
+        faces = []
+        im = images[idx]
+        det_out = detector.Predict(im, faces, shrink = 0.7)
+        classifier.Predict(det_out)
+
+        maskFrameDatas = []
+        LABELS = ['NO_MASK', 'MASK']
+        COLORS = [(0, 0, 255), (0, 255, 0)]
+        for face in faces:
+            label = LABELS[face.class_id]
+            color = COLORS[face.class_id]
+            left, right, top, bottom = [int(item) for item in face.rect_info]
+            maskFrameData = {}
+            maskFrameData['top'] = top
+            maskFrameData['right'] = right
+            maskFrameData['bottom'] = bottom
+            maskFrameData['left'] = left
+            maskFrameData['confidence'] = float(face.score)
+            maskFrameData['label'] = label
+            maskFrameDatas.append(maskFrameData)
+            maskIndex += 1
+            label_position = (left, top)
+            cv2.putText(frame, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2, cv2.LINE_AA) 
+            cv2.rectangle(frame, (left, top), (right, bottom), color, 3)
+        writer.write(frame)
+        cv2.imshow('Mask Detection', frame_copy)
+        frameData['frame'] = index
+        frameData['data'] = maskFrameDatas
+        data.append(frameData)
+    print(json.dumps(frameData))
+    index += 1
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+    with open("./result/mask_detection.json", "w") as f:
+        json.dump(data, f)
+    writer.release()
+    cv2.destroyAllWindows()
+    fps = 30
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    writer = cv2.VideoWriter("./result/result.mp4", fourcc, fps, img_shape)
+
+if __name__ == "__main__":
+    models_dir = '/root/projects/PaddleMask/models/'
+    models_dir = '/models/'
+    image_paths = [
+        './mask_input.png',
+        './test_mask_detection.jpg'
+    ]
+    #predict_images(models_dir, image_paths)
+
+    video_path = "/Users/chenlingchi/Downloads/crowd.mp4"
+    predict_video(models_dir, video_path, im_shape, use_camrea=False)
