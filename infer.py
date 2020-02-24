@@ -17,6 +17,7 @@ import os
 import sys
 import ast
 import time
+import json
 
 import numpy as np
 import cv2
@@ -41,6 +42,8 @@ def VisualizeResult(im, faces):
         label = LABELS[face.class_id]
         color = COLORS[face.class_id]
         left, right, top, bottom = [int(item) for item in face.rect_info]
+        [print(item) for item in face.rect_info]
+           
         label_position = (left, top)
         cv2.putText(im, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2, cv2.LINE_AA) 
         cv2.rectangle(im, (left, top), (right, bottom), color, 3)
@@ -140,6 +143,9 @@ class FaceDetector:
             hd = ymax - ymin
             if score > self.threshold:
                 roi_rect = ori_im[int(ymin) : int(ymax), int(xmin): int(xmax)]
+                if 0 in roi_rect.shape:	
+                    print('find rezie')
+                    continue
                 det_out.append(FaceResult(roi_rect, [xmin, xmax, ymin, ymax]))
         return det_out
 
@@ -171,13 +177,14 @@ def predict_images(model_dir, image_paths):
     faces = []
     for idx in range(len(images)):
         im = images[idx]
+        print(im.shape)
         det_out = detector.Predict(im, faces, shrink = 0.7)
         classifier.Predict(det_out)
         img = VisualizeResult(im, det_out)
         cv2.imwrite("result_%d.jpg" % idx, img)
 
 
-def predict_video(model_dir, video_path, img_shape=(1920, 1080), use_camera=False):
+def predict_video(model_dir, video_path, im_shape=(1920, 1080), use_camera=False):
     if use_camera:
         capture = cv2.VideoCapture(0)
     capture = cv2.VideoCapture(video_path)
@@ -186,38 +193,45 @@ def predict_video(model_dir, video_path, img_shape=(1920, 1080), use_camera=Fals
         model_dir = models_dir + '/pyramidbox_lite/',
         mean = [104.0, 177.0, 123.0],
         scale = [0.007843, 0.007843, 0.007843],
-        use_gpu = False,
-        threshold = 0.7
+        use_gpu = True,
+        threshold = 0.4
     )
 
     classifier = MaskClassifier(
         model_dir = models_dir + '/mask_detector/',
         mean = [0.5, 0.5, 0.5],
         scale = [1.0, 1.0, 1.0],
-        use_gpu = False
+        use_gpu = True
     )
+
+    fps = 30
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    writer = cv2.VideoWriter("result.mp4", fourcc, fps, im_shape)
     data = []
     index = 0
-    while (1):
+    for i in range(100):
+   # while (1):
         frameData = {}
         ret, frame = capture.read()
         if ret == False:
             break
         frame_copy = frame.copy()
+        print(frame.shape)
+        #print(frame[1,1,:])
+        #frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        #print(frame[1,1,:])
+        cv2.imwrite("crowd.jpg" frame)
+        
+        break
+        faces = []
         det_out = detector.Predict(frame, faces, shrink = 0.7)
         classifier.Predict(det_out)
-        img = VisualizeResult(im, det_out)
-        cv2.imwrite("result_%d.jpg" % idx, img)
-
-        faces = []
-        im = images[idx]
-        det_out = detector.Predict(im, faces, shrink = 0.7)
-        classifier.Predict(det_out)
-
+        
         maskFrameDatas = []
         LABELS = ['NO_MASK', 'MASK']
         COLORS = [(0, 0, 255), (0, 255, 0)]
         for face in faces:
+            [print(item) for item in face.rect_info]
             label = LABELS[face.class_id]
             color = COLORS[face.class_id]
             left, right, top, bottom = [int(item) for item in face.rect_info]
@@ -231,33 +245,31 @@ def predict_video(model_dir, video_path, img_shape=(1920, 1080), use_camera=Fals
             maskFrameDatas.append(maskFrameData)
             maskIndex += 1
             label_position = (left, top)
-            cv2.putText(frame, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2, cv2.LINE_AA) 
-            cv2.rectangle(frame, (left, top), (right, bottom), color, 3)
-        writer.write(frame)
-        cv2.imshow('Mask Detection', frame_copy)
+            cv2.putText(frame_copy, label, label_position, cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2, cv2.LINE_AA) 
+            cv2.rectangle(frame_copy, (left, top), (right, bottom), color, 3)
+        writer.write(frame_copy)
+        #cv2.imshow('Mask Detection', frame_copy)
         frameData['frame'] = index
         frameData['data'] = maskFrameDatas
         data.append(frameData)
-    print(json.dumps(frameData))
-    index += 1
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-    with open("./result/mask_detection.json", "w") as f:
+        print(json.dumps(frameData))
+        index += 1
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    with open("mask_detection.json", "w") as f:
         json.dump(data, f)
     writer.release()
     cv2.destroyAllWindows()
-    fps = 30
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    writer = cv2.VideoWriter("./result/result.mp4", fourcc, fps, img_shape)
 
 if __name__ == "__main__":
     models_dir = '/root/projects/PaddleMask/models/'
-    models_dir = '/models/'
+    models_dir = '/home/chenlingchi/project/clc_mask/inference_model/'
     image_paths = [
-        './mask_input.png',
-        './test_mask_detection.jpg'
+        './mask.jpg',
+        #'./test_mask_detection.jpg'
     ]
-    #predict_images(models_dir, image_paths)
+    predict_images(models_dir, image_paths)
 
-    video_path = "/Users/chenlingchi/Downloads/crowd.mp4"
-    predict_video(models_dir, video_path, im_shape, use_camrea=False)
+    video_path = "/home/chenlingchi/project/crowd.mp4"
+    predict_video(models_dir, video_path, im_shape=(1920,1080), use_camera=False)
